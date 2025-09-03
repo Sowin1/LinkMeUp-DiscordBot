@@ -4,6 +4,10 @@ module.exports = {
 
   // Level usage
 
+  COOLDOWN: 1,
+  AVERAGE_CHARS: 40,
+
+
   ignoredChannels: [
     "1276992645734076457"
   ],
