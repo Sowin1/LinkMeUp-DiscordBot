@@ -4,7 +4,7 @@ module.exports = {
 
   // Level usage
 
-  COOLDOWN: 1,
+  COOLDOWN: 15,
   AVERAGE_CHARS: 40,
 
 
