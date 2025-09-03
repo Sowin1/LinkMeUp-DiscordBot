@@ -62,7 +62,7 @@ module.exports = {
 
 function calculateXp(charCount) {
   const minXp = 10;
-  const maxXp = 20;
+  const maxXp = 25;
 
   const bonusXpRange = maxXp - minXp;
 
