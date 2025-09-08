@@ -2,6 +2,7 @@
 const Database = require('better-sqlite3');
 const db = new Database('leveling.sqlite');
 
+
 function setupDatabase() {
   const createTable = `
     CREATE TABLE IF NOT EXISTS levels (
