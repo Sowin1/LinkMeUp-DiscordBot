@@ -1,4 +1,3 @@
-
 const Database = require('better-sqlite3');
 const db = new Database('leveling.sqlite');
 
@@ -37,7 +36,14 @@ function setUser(userID, xp, level) {
     stmt.run(userID, xp, level, Date.now()); 
 }
 
+function getLeaderboard() {
+  const sql = `SELECT * FROM levels ORDER BY xp DESC`;
+  const stmt = db.prepare(sql);
+  return stmt.all();
+}
+
 module.exports = {
   getUser,
-  setUser
+  setUser,
+  getLeaderboard
 };
