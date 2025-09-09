@@ -1,6 +1,5 @@
-const Database = require('better-sqlite3');
-const db = new Database('leveling.sqlite');
-
+const Database = require("better-sqlite3");
+const db = new Database("leveling.sqlite");
 
 function setupDatabase() {
   const createTable = `
@@ -12,7 +11,7 @@ function setupDatabase() {
     );
   `;
   db.exec(createTable);
-  console.log('Base de données prête.');
+  console.log("Base de données prête.");
 }
 
 setupDatabase();
@@ -24,7 +23,7 @@ function getUser(userID) {
 }
 
 function setUser(userID, xp, level) {
-    const sql = `
+  const sql = `
         INSERT INTO levels (userID, xp, level, lastMessageTimestamp) 
         VALUES (?, ?, ?, ?)
         ON CONFLICT(userID) DO UPDATE SET
@@ -32,12 +31,14 @@ function setUser(userID, xp, level) {
         level = excluded.level,
         lastMessageTimestamp = excluded.lastMessageTimestamp;
     `;
-    const stmt = db.prepare(sql);
-    stmt.run(userID, xp, level, Date.now()); 
+  const stmt = db.prepare(sql);
+  stmt.run(userID, xp, level, Date.now());
 }
 
 function getLeaderboard() {
-  const sql = `SELECT * FROM levels ORDER BY xp DESC`;
+  const sql = `SELECT * FROM levels ORDER BY xp DESC
+  LIMIT 10;
+  `;
   const stmt = db.prepare(sql);
   return stmt.all();
 }
@@ -45,5 +46,5 @@ function getLeaderboard() {
 module.exports = {
   getUser,
   setUser,
-  getLeaderboard
+  getLeaderboard,
 };
