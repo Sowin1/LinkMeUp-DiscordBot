@@ -20,7 +20,7 @@ module.exports = {
     if (!userData) {
       return interaction.reply({
         content: "Utilisateur non trouvé dans la base de données",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 

@@ -36,7 +36,7 @@ for (const folder of commandFolders) {
   }
 }
 
-const eventsPath = path.join(__dirname, 'src', 'events');
+const eventsPath = path.join(__dirname, "src", "events");
 
 const loadEvents = (dir) => {
   const files = fs.readdirSync(dir);
@@ -46,8 +46,7 @@ const loadEvents = (dir) => {
     const stat = fs.lstatSync(filePath);
     if (stat.isDirectory()) {
       loadEvents(filePath);
-    } 
-    else if (file.endsWith('.js')) {
+    } else if (file.endsWith(".js")) {
       const event = require(filePath);
       if (event.name) {
         if (event.once) {
@@ -57,7 +56,9 @@ const loadEvents = (dir) => {
         }
         console.log(`[EVENT] L'événement ${event.name} a été chargé.`);
       } else {
-        console.log(`[AVERTISSEMENT] Le fichier d'événement à ${filePath} n'a pas de propriété "name".`);
+        console.log(
+          `[AVERTISSEMENT] Le fichier d'événement à ${filePath} n'a pas de propriété "name".`
+        );
       }
     }
   }
