@@ -47,7 +47,7 @@ module.exports = {
         await interaction.reply({
           content:
             "Désolé, une erreur est survenue lors de la création de l'image",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
     }
