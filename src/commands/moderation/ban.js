@@ -133,6 +133,6 @@ module.exports = {
       });
     }
     const idBan = crypto.randomUUID();
-    db.addBan(target.id, idBan, reason);
+    db.addBan(target.id, interaction.member.id, reason);
   },
 };

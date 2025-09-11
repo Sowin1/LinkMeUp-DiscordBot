@@ -1,245 +1,113 @@
 const Database = require("better-sqlite3");
+const crypto = require("crypto");
 const db = new Database("dbLinkMeUp.sqlite");
 
 function setupDatabase() {
-  const createTable = `
-    CREATE TABLE IF NOT EXISTS levels (
-      userID TEXT PRIMARY KEY,
-      xp INTEGER DEFAULT 0,
-      level INTEGER DEFAULT 0,
-      lastMessageTimestamp INTEGER DEFAULT 0 
-    );
-  `;
-  db.exec(createTable);
+  const createUsersTable = `
+        CREATE TABLE IF NOT EXISTS users (
+            userID TEXT PRIMARY KEY,
+            xp INTEGER DEFAULT 0,
+            level INTEGER DEFAULT 0,
+            lastMessageTimestamp INTEGER DEFAULT 0
+        );
+    `;
+  db.exec(createUsersTable);
 
   const createSanctionsTable = `
-    CREATE TABLE IF NOT EXISTS sanctions (
-      userID TEXT PRIMARY KEY,
-
-      nbWarn INTEGER DEFAULT 0,
-      idWarns TEXT DEFAULT '[]', -- liste d’IDs en JSON
-      reasonWarns TEXT DEFAULT '[]', -- liste des raisons en JSON
-
-      nbMute INTEGER DEFAULT 0,
-      idMutes TEXT DEFAULT '[]',
-      reasonMutes TEXT DEFAULT '[]',
-      muteTimes TEXT DEFAULT '[]', -- durées stockées en JSON (ms ou secondes)
-
-      nbBan INTEGER DEFAULT 0,
-      idBans TEXT DEFAULT '[]',
-      reasonBans TEXT DEFAULT '[]'
-    );
-  `;
+        CREATE TABLE IF NOT EXISTS sanctions (
+            sanctionID TEXT PRIMARY KEY,
+            userID TEXT NOT NULL,
+            type TEXT NOT NULL, -- 'warn', 'mute', 'ban'
+            reason TEXT,
+            moderatorID TEXT NOT NULL,
+            duration INTEGER, -- Uniquement pour les mutes (en millisecondes)
+            createdAt INTEGER NOT NULL
+        );
+    `;
   db.exec(createSanctionsTable);
-  console.log("Base de données prête (levels + sanctions).");
+  console.log("Base de données prête (users + sanctions).");
 }
 
 setupDatabase();
-// Levels
+
 function getUser(userID) {
-  const sql = `SELECT * FROM levels WHERE userID = ?`;
-  const stmt = db.prepare(sql);
-  return stmt.get(userID);
+  const stmt = db.prepare(`SELECT * FROM users WHERE userID = ?`);
+  let user = stmt.get(userID);
+  if (!user) {
+    const insertStmt = db.prepare(`INSERT INTO users (userID) VALUES (?)`);
+    insertStmt.run(userID);
+    user = { userID, xp: 0, level: 0, lastMessageTimestamp: 0 };
+  }
+  return user;
 }
 
-function setUser(userID, xp, level) {
-  const sql = `
-        INSERT INTO levels (userID, xp, level, lastMessageTimestamp) 
+function setUser(userID, xp, level, lastMessageTimestamp) {
+  const stmt = db.prepare(`
+        INSERT INTO users (userID, xp, level, lastMessageTimestamp)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(userID) DO UPDATE SET
-        xp = excluded.xp,
-        level = excluded.level,
-        lastMessageTimestamp = excluded.lastMessageTimestamp;
-    `;
-  const stmt = db.prepare(sql);
-  stmt.run(userID, xp, level, Date.now());
+            xp = excluded.xp,
+            level = excluded.level,
+            lastMessageTimestamp = excluded.lastMessageTimestamp;
+    `);
+  stmt.run(userID, xp, level, lastMessageTimestamp);
 }
 
 function getLeaderboard() {
-  const sql = `SELECT * FROM levels ORDER BY xp DESC
-  LIMIT 10;
-  `;
-  const stmt = db.prepare(sql);
+  const stmt = db.prepare(
+    `SELECT userID, xp, level FROM users ORDER BY xp DESC LIMIT 10`
+  );
   return stmt.all();
 }
 
-// Sanctions
-
-function getSanctions(userID) {
-  const sql = `SELECT * FROM sanctions WHERE userID = ?`;
-  const stmt = db.prepare(sql);
-  return stmt.get(userID);
+function addSanction(userID, moderatorID, type, reason, duration = null) {
+  const sanctionID = crypto.randomUUID();
+  const createdAt = Date.now();
+  const stmt = db.prepare(`
+        INSERT INTO sanctions (sanctionID, userID, moderatorID, type, reason, duration, createdAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
+    `);
+  stmt.run(sanctionID, userID, moderatorID, type, reason, duration, createdAt);
+  return sanctionID;
 }
 
-function initSanctions(userID) {
-  const sql = `
-    INSERT OR IGNORE INTO sanctions (userID) VALUES (?);
-  `;
-  const stmt = db.prepare(sql);
-  stmt.run(userID);
+function removeSanction(sanctionID) {
+  const stmt = db.prepare(`DELETE FROM sanctions WHERE sanctionID = ?`);
+  stmt.run(sanctionID);
 }
 
-function addWarn(userID, warnID, reason) {
-  initSanctions(userID);
-  const sanctions = getSanctions(userID);
+function getSanctions(userID, type = null) {
+  let sql = `SELECT * FROM sanctions WHERE userID = ?`;
+  const params = [userID];
+  if (type) {
+    sql += ` AND type = ?`;
+    params.push(type);
+  }
+  sql += ` ORDER BY createdAt DESC`;
 
-  let ids = JSON.parse(sanctions.idWarns);
-  let reasons = JSON.parse(sanctions.reasonWarns);
-
-  ids.push(warnID);
-  reasons.push(reason);
-
-  const sql = `
-    UPDATE sanctions
-    SET nbWarn = nbWarn + 1,
-        idWarns = ?,
-        reasonWarns = ?
-    WHERE userID = ?;
-  `;
   const stmt = db.prepare(sql);
-  stmt.run(JSON.stringify(ids), JSON.stringify(reasons), userID);
+  return stmt.all(...params);
 }
 
-function addMute(userID, muteID, reason, duration) {
-  initSanctions(userID);
-  const sanctions = getSanctions(userID);
-
-  let ids = JSON.parse(sanctions.idMutes);
-  let reasons = JSON.parse(sanctions.reasonMutes);
-  let times = JSON.parse(sanctions.muteTimes);
-
-  ids.push(muteID);
-  reasons.push(reason);
-  times.push(duration);
-
-  const sql = `
-    UPDATE sanctions
-    SET nbMute = nbMute + 1,
-        idMutes = ?,
-        reasonMutes = ?,
-        muteTimes = ?
-    WHERE userID = ?;
-  `;
-  const stmt = db.prepare(sql);
-  stmt.run(
-    JSON.stringify(ids),
-    JSON.stringify(reasons),
-    JSON.stringify(times),
-    userID
-  );
+function addWarn(userID, moderatorID, reason) {
+  return addSanction(userID, moderatorID, "warn", reason);
 }
 
-function addBan(userID, banID, reason) {
-  initSanctions(userID);
-  const sanctions = getSanctions(userID);
-
-  let ids = JSON.parse(sanctions.idBans);
-  let reasons = JSON.parse(sanctions.reasonBans);
-
-  ids.push(banID);
-  reasons.push(reason);
-
-  const sql = `
-    UPDATE sanctions
-    SET nbBan = nbBan + 1,
-        idBans = ?,
-        reasonBans = ?
-    WHERE userID = ?;
-  `;
-  const stmt = db.prepare(sql);
-  stmt.run(JSON.stringify(ids), JSON.stringify(reasons), userID);
+function addMute(userID, moderatorID, reason, duration) {
+  return addSanction(userID, moderatorID, "mute", reason, duration);
 }
 
-function removeWarn(userID, warnID) {
-  const sanctions = getSanctions(userID);
-  if (!sanctions) return;
-
-  let ids = JSON.parse(sanctions.idWarns);
-  let reasons = JSON.parse(sanctions.reasonWarns);
-
-  const index = ids.indexOf(warnID);
-  if (index === -1) return;
-
-  ids.splice(index, 1);
-  reasons.splice(index, 1);
-
-  const sql = `
-    UPDATE sanctions
-    SET nbWarn = nbWarn - 1,
-        idWarns = ?,
-        reasonWarns = ?
-    WHERE userID = ?;
-  `;
-  const stmt = db.prepare(sql);
-  stmt.run(JSON.stringify(ids), JSON.stringify(reasons), userID);
-}
-
-function removeMute(userID, muteID) {
-  const sanctions = getSanctions(userID);
-  if (!sanctions) return;
-
-  let ids = JSON.parse(sanctions.idMutes);
-  let reasons = JSON.parse(sanctions.reasonMutes);
-  let times = JSON.parse(sanctions.muteTimes);
-
-  const index = ids.indexOf(muteID);
-  if (index === -1) return;
-
-  ids.splice(index, 1);
-  reasons.splice(index, 1);
-  times.splice(index, 1);
-
-  const sql = `
-    UPDATE sanctions
-    SET nbMute = nbMute - 1,
-        idMutes = ?,
-        reasonMutes = ?,
-        muteTimes = ?
-    WHERE userID = ?;
-  `;
-  const stmt = db.prepare(sql);
-  stmt.run(
-    JSON.stringify(ids),
-    JSON.stringify(reasons),
-    JSON.stringify(times),
-    userID
-  );
-}
-
-function removeBan(userID, banID) {
-  const sanctions = getSanctions(userID);
-  if (!sanctions) return;
-
-  let ids = JSON.parse(sanctions.idBans);
-  let reasons = JSON.parse(sanctions.reasonBans);
-
-  const index = ids.indexOf(banID);
-  if (index === -1) return;
-
-  ids.splice(index, 1);
-  reasons.splice(index, 1);
-
-  const sql = `
-    UPDATE sanctions
-    SET nbBan = nbBan - 1,
-        idBans = ?,
-        reasonBans = ?
-    WHERE userID = ?;
-  `;
-  const stmt = db.prepare(sql);
-  stmt.run(JSON.stringify(ids), JSON.stringify(reasons), userID);
+function addBan(userID, moderatorID, reason) {
+  return addSanction(userID, moderatorID, "ban", reason);
 }
 
 module.exports = {
   getUser,
   setUser,
   getLeaderboard,
-
   getSanctions,
   addWarn,
   addMute,
   addBan,
-  removeWarn,
-  removeMute,
-  removeBan,
+  removeSanction,
 };
