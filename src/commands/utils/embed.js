@@ -1,189 +1,325 @@
+const { flatten } = require("discord.js");
 const {
   SlashCommandBuilder,
   PermissionsBitField,
   EmbedBuilder,
   ActionRowBuilder,
-  StringSelectMenuBuilder,
-  StringSelectMenuOptionBuilder,
-  ComponentType,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ChannelType,
+  MessageFlags,
 } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("embed")
-    .setDescription("Crée et modifie un embed de manière interactive.")
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+    .setDescription("Crée ou modifie un embed.")
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+    .addStringOption((option) =>
+      option
+        .setName("action")
+        .setDescription("Que souhaitez-vous faire ?")
+        .setRequired(true)
+        .addChoices(
+          { name: "Créer", value: "creer" },
+          { name: "Modifier", value: "modifier" }
+        )
+    )
+    .addStringOption((option) =>
+      option
+        .setName("message_id")
+        .setDescription(
+          "L'ID du message à modifier (requis si action='Modifier')"
+        )
+        .setRequired(false)
+    )
+    .addChannelOption((option) =>
+      option
+        .setName("salon")
+        .setDescription(
+          "Le salon où envoyer ou modifier le message (défaut: salon actuel)"
+        )
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false)
+    ),
 
   async execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    if (
+      !interaction.member.permissions.has(
+        PermissionsBitField.Flags.Administrator
+      )
+    ) {
       return interaction.reply({
-        content: `Vous devez avoir la permission \`[Administrator]\` pour effectuer cette commande.`,
-        ephemeral: true,
+        content: `Vous devez avoir la permission \`[Administrator]\` pour effectuer cette commande`,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
-    const embed = new EmbedBuilder()
-      .setColor("#A30000")
-      .setTitle("Titre de l'embed")
-      .setDescription("Description de l'embed. Choisissez une option ci-dessous pour la modifier.")
-      .setThumbnail("https://i.imgur.com/vnWSVCL.jpeg")
-      .setFooter({
-        text: `Demandé par ${interaction.user.username}`,
-        iconURL: interaction.user.displayAvatarURL({ dynamic: true }),
-      })
-      .setTimestamp();
+    const defaultColor = "#A30000";
+    const action = interaction.options.getString("action");
 
-    const menu = new StringSelectMenuBuilder()
-      .setCustomId('embed_editor_menu')
-      .setPlaceholder('Choisissez une propriété à modifier')
-      .addOptions(
-        new StringSelectMenuOptionBuilder()
-          .setLabel('Titre')
-          .setDescription('Modifier le titre de l\'embed')
-          .setValue('title')
-          .setEmoji('✏️'),
-        new StringSelectMenuOptionBuilder()
-          .setLabel('Description')
-          .setDescription('Modifier la description de l\'embed')
-          .setValue('description')
-          .setEmoji('📜'),
-        new StringSelectMenuOptionBuilder()
-          .setLabel('Couleur')
-          .setDescription('Modifier la couleur de la bordure (format hexadécimal)')
-          .setValue('color')
-          .setEmoji('🎨'),
-        new StringSelectMenuOptionBuilder()
-          .setLabel('Miniature (Thumbnail)')
-          .setDescription('Modifier l\'image miniature (doit être une URL)')
-          .setValue('thumbnail')
-          .setEmoji('🖼️'),
-        new StringSelectMenuOptionBuilder()
-          .setLabel('Image Principale')
-          .setDescription('Modifier l\'image principale de l\'embed (doit être une URL)')
-          .setValue('image')
-          .setEmoji('🏞️'),
-        new StringSelectMenuOptionBuilder()
-          .setLabel('Pied de page (Footer)')
-          .setDescription('Modifier le texte du pied de page')
-          .setValue('footer_text')
-          .setEmoji('👣')
+    if (action === "creer") {
+      const modal = new ModalBuilder()
+        .setCustomId("embed_builder_modal_create")
+        .setTitle("Créateur d'Embed");
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("title_input")
+            .setLabel("Titre de l'embed")
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder("Quel titre souhaitez-vous donner à votre embed ?")
+            .setMaxLength(256)
+            .setRequired(false)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("desc_input")
+            .setLabel("Description de l'embed")
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder(
+              "Quelle description souhaitez-vous donner à votre embed ?"
+            )
+            .setMaxLength(4000)
+            .setRequired(false)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("color_input")
+            .setLabel("Couleur ")
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder("Ex: #FF5733 (défaut: #A30000)")
+            .setMaxLength(7)
+            .setRequired(false)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("image_input")
+            .setLabel("URL de l'Image Principale")
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder("https://i.imgur.com/...")
+            .setRequired(false)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("footer_input")
+            .setLabel("Footer de l'embed")
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder(`Quel footer souhaitez-vous donner à votre embed ?`)
+            .setRequired(false)
+        )
       );
 
-    const row = new ActionRowBuilder().addComponents(menu);
+      await interaction.showModal(modal);
 
-    const initialMessage = await interaction.reply({
-      embeds: [embed],
-      components: [row],
-      fetchReply: true,
-    });
+      try {
+        const modalSubmit = await interaction.awaitModalSubmit({
+          time: 300_000,
+          filter: (i) => i.user.id === interaction.user.id,
+        });
 
-    const userFilter = (i) => i.user.id === interaction.user.id;
+        const finalEmbed = new EmbedBuilder();
+        const title = modalSubmit.fields.getTextInputValue("title_input");
+        const description = modalSubmit.fields.getTextInputValue("desc_input");
+        const color = modalSubmit.fields.getTextInputValue("color_input");
+        const image = modalSubmit.fields.getTextInputValue("image_input");
+        const footer = modalSubmit.fields.getTextInputValue("footer_input");
 
-    const menuCollector = initialMessage.createMessageComponentCollector({
-      filter: userFilter,
-      componentType: ComponentType.StringSelect,
-      time: 180000   
-    });
+        if (title) finalEmbed.setTitle(title);
+        if (description) finalEmbed.setDescription(description);
 
-    menuCollector.on('collect', async (menuInteraction) => {
-      const selectedValue = menuInteraction.values[0];
-      await menuInteraction.reply({
-        content: `Très bien ! Veuillez envoyer le nouveau contenu pour : **${selectedValue}**.`,
-        ephemeral: true
-      });
-      const textFilter = (msg) => msg.author.id === interaction.user.id;
-      const textCollector = interaction.channel.createMessageCollector({
-        filter: textFilter,
-        max: 1,
-        time: 60000 
-      });
-
-      textCollector.on('collect', async (msg) => {
-        try {
-          if (!menuInteraction.deferred && !menuInteraction.replied) {
-              await menuInteraction.deferUpdate();
-          }
-
-          let updateSuccessful = true;
-          let errorMessage = "";
-
-          switch (selectedValue) {
-            case 'title':
-              if (msg.content.length > 256) {
-                errorMessage = "Le titre ne peut pas dépasser 256 caractères.";
-                updateSuccessful = false;
-              } else {
-                embed.setTitle(msg.content);
-              }
-              break;
-            case 'description':
-              if (msg.content.length > 4096) {
-                  errorMessage = "La description ne peut pas dépasser 4096 caractères.";
-                  updateSuccessful = false;
-              } else {
-                embed.setDescription(msg.content);
-              }
-              break;
-            case 'color':
-              if (/^#[0-9A-F]{6}$/i.test(msg.content)) {
-                embed.setColor(msg.content);
-              } else {
-                errorMessage = "Format de couleur invalide. Utilisez un code hexadécimal comme `#FF5733`.";
-                updateSuccessful = false;
-              }
-              break;
-            case 'thumbnail':
-            case 'image':
-              if (msg.content.startsWith('http://') || msg.content.startsWith('https://')) {
-                if (selectedValue === 'thumbnail') embed.setThumbnail(msg.content);
-                if (selectedValue === 'image') embed.setImage(msg.content);
-              } else {
-                errorMessage = "L'URL fournie n'est pas valide. Elle doit commencer par `http://` ou `https://`.";
-                updateSuccessful = false;
-              }
-              break;
-            case 'footer_text':
-              if (msg.content.length > 2048) {
-                  errorMessage = "Le pied de page ne peut pas dépasser 2048 caractères.";
-                  updateSuccessful = false;
-              } else {
-                embed.setFooter({
-                  text: msg.content,
-                  iconURL: interaction.user.displayAvatarURL({ dynamic: true }),
-                });
-              }
-              break;
-          }
-
-          await msg.delete();
-
-          if (updateSuccessful) {
-            await initialMessage.edit({ embeds: [embed] });
-            await menuInteraction.followUp({ content: `✅ La propriété **${selectedValue}** a été mise à jour !`, ephemeral: true });
-          } else {
-            await menuInteraction.followUp({ content: `❌ Erreur : ${errorMessage}`, ephemeral: true });
-          }
-
-        } catch (error) {
-          console.error("Erreur lors de la mise à jour de l'embed :", error);
-          await menuInteraction.followUp({ content: "Une erreur est survenue lors de la modification.", ephemeral: true });
+        if (color && /^#[0-9A-F]{6}$/i.test(color)) {
+          finalEmbed.setColor(color);
+        } else {
+          finalEmbed.setColor(defaultColor);
         }
-      });
 
-      textCollector.on('end', (collected, reason) => {
-        if (reason === 'time') {
-          menuInteraction.followUp({ content: 'Le temps pour envoyer le texte est écoulé. Opération annulée.', ephemeral: true });
+        if (
+          image &&
+          (image.startsWith("http://") || image.startsWith("https://"))
+        ) {
+          finalEmbed.setImage(image);
         }
-      });
-    });
 
-    menuCollector.on('end', (collected, reason) => {
-      if (reason === 'time') {
-        const disabledRow = new ActionRowBuilder().addComponents(
-          menu.setDisabled(true).setPlaceholder("Le temps pour modifier cet embed est écoulé.")
-        );
-        initialMessage.edit({ components: [disabledRow] }).catch(console.error);
+        const footerText = footer || `Demandé par ${interaction.user.username}`;
+        finalEmbed.setFooter({
+          text: footerText,
+          iconURL: interaction.user.displayAvatarURL({ dynamic: true }),
+        });
+
+        const targetChannel =
+          interaction.options.getChannel("salon") || interaction.channel;
+
+        await modalSubmit.reply({
+          content: `Embed créé avec succès ! Il sera envoyé dans ${targetChannel}.`,
+          flags: MessageFlags.Ephemeral,
+        });
+
+        const botPerms = targetChannel.permissionsFor(client.user);
+
+        if (!botPerms || !botPerms.has(["ViewChannel", "SendMessages"])) {
+          return interaction.reply({
+            content: "Je n'ai pas accès au channel spécifié",
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        await targetChannel.send({
+          embeds: [finalEmbed],
+        });
+      } catch (error) {
+        console.error("Erreur (création embed) :", error);
+        if (error.code === "InteractionCollectorError") {
+        }
       }
-    });
+    } else if (action === "modifier") {
+      const messageId = interaction.options.getString("message_id");
+      const channel =
+        interaction.options.getChannel("salon") || interaction.channel;
+
+      if (!messageId) {
+        return interaction.reply({
+          content:
+            "❌ Pour 'modifier', vous devez fournir l'option `message_id`.",
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      let targetMessage;
+      try {
+        targetMessage = await channel.messages.fetch(messageId);
+      } catch (e) {
+        return interaction.reply({
+          content: `❌ Message introuvable avec l'ID \`${messageId}\` dans le salon ${channel}.`,
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      if (targetMessage.author.id !== interaction.client.user.id) {
+        return interaction.reply({
+          content:
+            "❌ Je ne peux modifier que les embeds que j'ai moi-même envoyés.",
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      const oldEmbed = targetMessage.embeds[0];
+      if (!oldEmbed) {
+        return interaction.reply({
+          content: "❌ Ce message ne contient pas d'embed à modifier.",
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      const modal = new ModalBuilder()
+        .setCustomId(`embed_builder_modal_edit_${messageId}`)
+        .setTitle("Modificateur d'Embed");
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("title_input")
+            .setLabel("Titre")
+            .setStyle(TextInputStyle.Short)
+            .setValue(oldEmbed.title || "")
+            .setMaxLength(256)
+            .setRequired(false)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("desc_input")
+            .setLabel("Description")
+            .setStyle(TextInputStyle.Paragraph)
+            .setValue(oldEmbed.description || "")
+            .setMaxLength(4000)
+            .setRequired(false)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("color_input")
+            .setLabel("Couleur (Hexadécimal)")
+            .setStyle(TextInputStyle.Short)
+            .setValue(oldEmbed.hexColor || defaultColor)
+            .setMaxLength(7)
+            .setRequired(false)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("image_input")
+            .setLabel("URL de l'Image Principale")
+            .setStyle(TextInputStyle.Short)
+            .setValue(oldEmbed.image?.url || "")
+            .setRequired(false)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("footer_input")
+            .setLabel("Texte du Pied de page")
+            .setStyle(TextInputStyle.Short)
+            .setValue(oldEmbed.footer?.text || "")
+            .setRequired(false)
+        )
+      );
+
+      await interaction.showModal(modal);
+
+      try {
+        const modalSubmit = await interaction.awaitModalSubmit({
+          time: 300_000,
+          filter: (i) => i.user.id === interaction.user.id,
+        });
+
+        const newEmbed = new EmbedBuilder();
+        const title = modalSubmit.fields.getTextInputValue("title_input");
+        const description = modalSubmit.fields.getTextInputValue("desc_input");
+        const color = modalSubmit.fields.getTextInputValue("color_input");
+        const image = modalSubmit.fields.getTextInputValue("image_input");
+        const footer = modalSubmit.fields.getTextInputValue("footer_input");
+
+        if (title) newEmbed.setTitle(title);
+        if (description) newEmbed.setDescription(description);
+
+        if (color && /^#[0-9A-F]{6}$/i.test(color)) {
+          newEmbed.setColor(color);
+        } else {
+          newEmbed.setColor(oldEmbed.hexColor || defaultColor);
+        }
+
+        if (
+          image &&
+          (image.startsWith("http://") || image.startsWith("https://"))
+        ) {
+          newEmbed.setImage(image);
+        } else if (image) {
+          if (oldEmbed.image?.url) newEmbed.setImage(oldEmbed.image.url);
+        } else {
+          newEmbed.setImage(null);
+        }
+
+        if (footer) {
+          newEmbed.setFooter({
+            text: footer,
+            iconURL:
+              oldEmbed.footer?.iconURL ||
+              interaction.user.displayAvatarURL({ dynamic: true }),
+          });
+        } else {
+          newEmbed.setFooter(null);
+        }
+
+        await targetMessage.edit({ embeds: [newEmbed] });
+
+        await modalSubmit.reply({
+          content: `✅ L'embed [message](${targetMessage.url}) a été modifié avec succès !`,
+          flags: MessageFlags.Ephemeral,
+        });
+      } catch (error) {
+        console.error("Erreur (modification embed) :", error);
+        if (error.code === "InteractionCollectorError") {
+        }
+      }
+    }
   },
 };
