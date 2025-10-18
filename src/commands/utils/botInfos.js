@@ -1,8 +1,8 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-
+const { version } = require("../../../package.json");
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("info")
+    .setName("botinfo")
     .setDescription("Affiche les informations du bot"),
   async execute(interaction) {
     const { client } = interaction;
@@ -21,7 +21,7 @@ module.exports = {
       .setThumbnail(client.user.displayAvatarURL({ dynamic: true }))
       .setDescription(`Développé avec ❤️ par <@375933463255056384>\n`)
       .addFields(
-        { name: "📦 Version", value: "v0.6", inline: true },
+        { name: "📦 Version", value: `v${version}`, inline: true },
         { name: "🕒 Uptime", value: formatUptime(), inline: true },
         {
           name: "💾 Mémoire",
