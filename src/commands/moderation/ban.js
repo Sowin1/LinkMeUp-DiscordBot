@@ -8,7 +8,6 @@ const {
   ActionRowBuilder,
   ComponentType,
 } = require("discord.js");
-const crypto = require("crypto");
 
 const db = require("../../database/database.js");
 
@@ -132,7 +131,6 @@ module.exports = {
         components: [],
       });
     }
-    const idBan = crypto.randomUUID();
     db.addBan(target.id, interaction.member.id, reason);
   },
 };
