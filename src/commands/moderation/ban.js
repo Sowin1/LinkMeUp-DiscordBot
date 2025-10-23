@@ -111,6 +111,30 @@ module.exports = {
       });
 
       if (confirmation.customId === "confirm") {
+        try {
+          const dm = await target.createDM();
+          await dm.send({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0xff0000)
+                .setTitle("🚫 Vous avez été banni du serveur")
+                .addFields(
+                  {
+                    name: "Serveur",
+                    value: interaction.guild.name,
+                    inline: true,
+                  },
+                  { name: "Raison", value: reason, inline: true }
+                )
+                .setTimestamp(),
+            ],
+          });
+        } catch (err) {
+          await interaction.editReply({
+            content: `Impossible d'envoyer un DM à ${target.user.tag}. L'utilisateur ne sera pas prévenu`,
+          });
+          console.log(`Impossible d'envoyer un DM à  :`, err.message);
+        }
         await target.ban({ reason: reason });
         await confirmation.update({
           content: `✅ ${target.user.username} a été banni avec succès`,
