@@ -117,7 +117,7 @@ module.exports = {
             embeds: [
               new EmbedBuilder()
                 .setColor(0xff0000)
-                .setTitle("🚫 Vous avez été banni du serveur")
+                .setTitle("🚫 Vous avez été banni")
                 .addFields(
                   {
                     name: "Serveur",

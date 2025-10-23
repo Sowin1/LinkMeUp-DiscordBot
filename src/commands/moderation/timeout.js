@@ -139,7 +139,7 @@ module.exports = {
             embeds: [
               new EmbedBuilder()
                 .setColor(0x28282B)
-                .setTitle("🔇 Vous avez été rendu muet sur le serveur")
+                .setTitle("🔇 Vous avez été rendu muet")
                 .addFields(
                   {
                     name: "Serveur",
