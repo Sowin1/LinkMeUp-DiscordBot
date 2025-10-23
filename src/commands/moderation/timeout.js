@@ -133,6 +133,32 @@ module.exports = {
       });
 
       if (confirmation.customId === "confirm") {
+        try {
+          const dm = await target.createDM();
+          await dm.send({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0x28282B)
+                .setTitle("🔇 Vous avez été rendu muet sur le serveur")
+                .addFields(
+                  {
+                    name: "Serveur",
+                    value: interaction.guild.name,
+                    inline: true,
+                  },
+                  {name: "Durée", value: time + " jours", inline: true},
+                  { name: "Raison", value: reason, inline: true }
+                )
+                .setTimestamp(),
+            ],
+          });
+        } catch (err) {
+          await interaction.editReply({
+            content: `Impossible d'envoyer un DM à ${target.user.tag}. L'utilisateur ne sera pas prévenu`,
+          });
+          console.log(`Impossible d'envoyer un DM à  :`, err.message);
+        }
+
         await target.timeout(timeInMs, reason);
 
         db.addMute(target.id, interaction.member.id, reason, time);
